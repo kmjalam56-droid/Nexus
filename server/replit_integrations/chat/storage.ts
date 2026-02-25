@@ -1,0 +1,69 @@
+import { db } from "../../db";
+import { conversations, messages, trainingMessages } from "@shared/schema";
+import { eq, desc } from "drizzle-orm";
+
+export interface IChatStorage {
+  getConversation(id: number): Promise<typeof conversations.$inferSelect | undefined>;
+  getAllConversations(userId?: number): Promise<(typeof conversations.$inferSelect)[]>;
+  createConversation(title: string, userId?: number | null): Promise<typeof conversations.$inferSelect>;
+  deleteConversation(id: number): Promise<void>;
+  updateConversationTitle(id: number, title: string): Promise<void>;
+  getMessagesByConversation(conversationId: number): Promise<(typeof messages.$inferSelect)[]>;
+  createMessage(conversationId: number, role: string, content: string): Promise<typeof messages.$inferSelect>;
+  getAllTrainingMessages(): Promise<(typeof trainingMessages.$inferSelect)[]>;
+  createTrainingMessage(instruction: string): Promise<typeof trainingMessages.$inferSelect>;
+  deleteTrainingMessage(id: number): Promise<void>;
+}
+
+export const chatStorage: IChatStorage = {
+  async getConversation(id: number) {
+    const [conversation] = await db.select().from(conversations).where(eq(conversations.id, id));
+    return conversation;
+  },
+
+  async getAllConversations(userId?: number) {
+    if (userId) {
+      return db.select().from(conversations)
+        .where(eq((conversations as any).userId, userId))
+        .orderBy(desc(conversations.createdAt));
+    }
+    return db.select().from(conversations).orderBy(desc(conversations.createdAt));
+  },
+
+  async createConversation(title: string, userId: number | null = null) {
+    const [conversation] = await db.insert(conversations).values({ title, userId: userId as any }).returning();
+    return conversation;
+  },
+
+  async deleteConversation(id: number) {
+    await db.delete(messages).where(eq(messages.conversationId, id));
+    await db.delete(conversations).where(eq(conversations.id, id));
+  },
+
+  async updateConversationTitle(id: number, title: string) {
+    await db.update(conversations).set({ title }).where(eq(conversations.id, id));
+  },
+
+  async getMessagesByConversation(conversationId: number) {
+    return db.select().from(messages).where(eq(messages.conversationId, conversationId)).orderBy(messages.createdAt);
+  },
+
+  async createMessage(conversationId: number, role: string, content: string) {
+    const [message] = await db.insert(messages).values({ conversationId, role, content }).returning();
+    return message;
+  },
+
+  async getAllTrainingMessages() {
+    return db.select().from(trainingMessages).orderBy(desc(trainingMessages.createdAt));
+  },
+
+  async createTrainingMessage(instruction: string) {
+    const [message] = await db.insert(trainingMessages).values({ instruction }).returning();
+    return message;
+  },
+
+  async deleteTrainingMessage(id: number) {
+    await db.delete(trainingMessages).where(eq(trainingMessages.id, id));
+  },
+};
+
